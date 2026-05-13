@@ -1,0 +1,109 @@
+name: Shuttle CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    name: Test and Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma Generate
+        run: cd packages/backend && npx prisma generate
+
+      - name: TypeScript Compile Check (Backend)
+        run: npm run build -w @shuttle/backend
+
+      - name: Build Admin Web
+        run: npm run build -w admin-web
+
+      - name: Build Rider Web
+        run: npm run build -w rider-web
+
+      # Optional: Add Jest testing step here when tests are written
+      # - name: Run tests
+      #   run: npm test
+
+  docker-build:
+    name: Build Docker Images
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setting up Docker Buildx for multi-architecture builds if needed
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to Docker Registry (e.g., Docker Hub or AWS ECR)
+      # Uncomment and configure with Secrets to push images
+      # - name: Login to DockerHub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/backend/Dockerfile
+          push: false # Change to true when registry is configured
+          tags: shuttle-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Admin Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/admin-web/Dockerfile
+          push: false # Change to true when registry is configured
+          tags: shuttle-admin-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Rider Web Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/rider-web/Dockerfile
+          push: false # Change to true when registry is configured
+          tags: shuttle-rider-web:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Production
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Trigger Deployment
+        run: |
+          echo "Deployment step initiated. In a real-world scenario, you would:"
+          echo "1. SSH into the production server using appleboy/ssh-action"
+          echo "2. Run 'git pull' or 'docker-compose pull'"
+          echo "3. Run 'docker-compose up -d'"
+          echo "4. Run 'docker exec shuttle_backend npx prisma migrate deploy'"
+          echo "To enable this, configure the necessary SSH keys in GitHub Secrets."

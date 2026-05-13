@@ -1,0 +1,67 @@
+enum Role {
+  ADMIN
+  RIDER
+  DRIVER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum NotificationType {
+  SYSTEM
+  TRIP_UPDATE
+  PROMO
+}
+
+model User {
+  id             String         @id @default(uuid()) @db.Uuid
+  name           String         @db.VarChar(100)
+  email          String         @unique @db.VarChar(255)
+  phone          String?        @unique @db.VarChar(20)
+  passwordHash   String         @db.Text
+  role           Role           @default(RIDER)
+  status         UserStatus     @default(ACTIVE)
+  isActive       Boolean        @default(true)
+
+  // Driver location tracking (if role == DRIVER)
+  currentLat     Float?
+  currentLng     Float?
+  lastLocationAt DateTime?      @db.Timestamptz
+
+  createdAt      DateTime       @default(now()) @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @db.Timestamptz
+
+  // Commute Favorites
+  homeLat        Float?
+  homeLng        Float?
+  homeAddress    String?        @db.VarChar(255)
+  workLat        Float?
+  workLng        Float?
+  workAddress    String?        @db.VarChar(255)
+
+
+  tripInstances  TripInstance[]
+  bookings       Booking[]
+  messages       Message[]
+  vehicles       Vehicle[]      @relation("VehicleOwner")
+  subscriptions  Subscription[]
+  notifications  Notification[]
+
+  riderTransactions  Transaction[] @relation("RiderTransaction")
+  driverTransactions Transaction[] @relation("DriverTransaction")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String           @db.VarChar(255)
+  body      String           @db.Text
+  type      NotificationType @default(SYSTEM)
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now()) @db.Timestamptz
+}

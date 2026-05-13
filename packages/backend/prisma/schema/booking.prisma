@@ -1,0 +1,68 @@
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  BOARDED
+  NO_SHOW
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+model Booking {
+  id             String         @id @default(uuid()) @db.Uuid
+  
+  userId         String         @db.Uuid
+  user           User           @relation(fields: [userId], references: [id])
+  
+  tripInstanceId String         @db.Uuid
+  tripInstance   TripInstance   @relation(fields: [tripInstanceId], references: [id])
+  
+  seatsBooked    Int            @default(1) @db.SmallInt
+  pricePaid      Decimal        @db.Decimal(10, 2)
+  
+  status         BookingStatus  @default(PENDING)
+  paymentMethod  PaymentMethod  @default(CASH)
+  
+  qrPayload      String         @db.Text
+  
+  pickupStopId   String?        @db.Uuid
+  pickupStop     Stop?          @relation("PickupStop", fields: [pickupStopId], references: [id])
+  
+  dropoffStopId  String?        @db.Uuid
+  dropoffStop    Stop?          @relation("DropoffStop", fields: [dropoffStopId], references: [id])
+
+  createdAt      DateTime       @default(now()) @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @db.Timestamptz
+  messages       Message[]
+}
+
+model Message {
+  id        String   @id @default(uuid()) @db.Uuid
+  bookingId String   @db.Uuid
+  senderId  String   @db.Uuid
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  sender    User     @relation(fields: [senderId], references: [id])
+}
+
+model Subscription {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  
+  lineId      String   @db.Uuid
+  line        Line     @relation(fields: [lineId], references: [id])
+  
+  time        String   // Matches LineSchedule.time, e.g., "08:30"
+  daysOfWeek  Int[]    // [1,2,3,4,5] for Mon-Fri
+  
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  @@unique([userId, lineId, time])
+}

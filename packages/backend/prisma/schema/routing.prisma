@@ -1,0 +1,56 @@
+model Line {
+  id             String         @id @default(uuid()) @db.Uuid
+  name           String         @db.VarChar(150)
+  
+  // Geospatial start/end points
+  startLat       Float
+  startLng       Float
+  startPointName String?        @db.VarChar(100)
+  startLocation  Unsupported("geography(Point, 4326)")?
+  endLat         Float
+  endLng         Float
+  endPointName   String?        @db.VarChar(100)
+  endLocation    Unsupported("geography(Point, 4326)")?
+
+  fixedPrice     Decimal        @db.Decimal(10, 2)
+  commissionRate Decimal        @default(0.10) @db.Decimal(5, 2)
+  currency       String         @default("EGP") @db.VarChar(3)
+  
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now()) @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @db.Timestamptz
+
+  stops          Stop[]
+  tripInstances  TripInstance[]
+  schedules      LineSchedule[]
+  subscriptions  Subscription[]
+}
+
+model LineSchedule {
+  id         String   @id @default(uuid()) @db.Uuid
+  lineId     String   @db.Uuid
+  line       Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  time       String   // e.g., "08:30"
+  daysOfWeek Int[]    // [1,2,3,4,7] for Sun-Thu (where 7=Sun)
+  createdAt  DateTime @default(now()) @db.Timestamptz
+}
+
+model Stop {
+  id         String         @id @default(uuid()) @db.Uuid
+  
+  lineId     String         @db.Uuid
+  line       Line           @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  
+  name       String         @db.VarChar(150)
+  lat        Float
+  lng        Float
+  location   Unsupported("geography(Point, 4326)")?
+  
+  orderIndex Int
+
+  createdAt  DateTime       @default(now()) @db.Timestamptz
+  updatedAt  DateTime       @updatedAt @db.Timestamptz
+
+  pickupBookings  Booking[] @relation("PickupStop")
+  dropoffBookings Booking[] @relation("DropoffStop")
+}
