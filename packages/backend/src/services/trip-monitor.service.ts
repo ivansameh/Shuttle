@@ -16,11 +16,11 @@ import { ADMIN_DISPATCH_ROOM } from '../socket/handlers/admin.handler';
 export const startTripMonitor = () => {
   console.log('✅ Trip Monitor Service started (Interval: 15 mins)');
 
-  EventBus.subscribe(EventType.DRIVER_LOCATION_UPDATED, (payload: DriverLocationUpdatedEventPayload) => {
+  EventBus.subscribe(EventType.DRIVER_LOCATION_UPDATED, async (payload: DriverLocationUpdatedEventPayload) => {
     const { tripId, driverId, lat, lng, timestamp } = payload;
     
-    // Persist to in-memory store
-    setLivePosition({ driverId, tripId, lat, lng, timestamp });
+    // Persist to distributed store (Redis)
+    await setLivePosition({ driverId, tripId, lat, lng, timestamp });
 
     try {
       const io = getIO();

@@ -69,10 +69,9 @@ export const getTripTracking = async (req: AuthRequest, res: Response, next: Nex
       return;
     }
 
-    // --- 2. Read the last known driver position from the in-memory store ---
+    // --- 2. Read the last known driver position from the distributed store ---
     // Returns undefined if the driver hasn't started broadcasting yet
-    // (e.g., trip is SCHEDULED and the driver hasn't connected).
-    const livePosition = getLivePosition(tripId) ?? null;
+    const livePosition = (await getLivePosition(tripId)) ?? null;
 
     // --- 3. Build response ---
     res.status(200).json({

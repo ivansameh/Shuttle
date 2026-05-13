@@ -144,14 +144,12 @@ export const registerDriverHandlers = (io: Server, socket: Socket): void => {
   });
 
   // --- Disconnection ---
-  socket.on('disconnect', (reason) => {
+  socket.on('disconnect', async (reason) => {
     const activeTripId = (socket.data as SocketData).activeTripId;
 
-    // Remove the stale live position from the in-memory store so that
-    // the /tracking and /dispatch REST endpoints don't return ghost positions
-    // for a bus that is no longer actively broadcasting.
+    // Remove the stale live position from the distributed store
     if (activeTripId) {
-      clearLivePosition(activeTripId);
+      await clearLivePosition(activeTripId);
     }
 
     // socket.io automatically handles room cleanup. We log for observability

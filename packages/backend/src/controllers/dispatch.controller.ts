@@ -79,9 +79,9 @@ export const getDispatchFeed = async (req: Request, res: Response): Promise<void
       orderBy: { departureTime: 'asc' },
     });
 
-    // --- 3. Build a lookup map from the live-state store ---
-    // getAllLivePositions() is O(n) over the Map values — fine for MVP fleet size.
-    const livePositions = getAllLivePositions();
+    // --- 3. Build a lookup map from the distributed store ---
+    // getAllLivePositions() reads all trip_live keys from Redis.
+    const livePositions = await getAllLivePositions();
     const livePositionByTripId = new Map<string, LivePosition>(
       livePositions.map((pos) => [pos.tripId, pos]),
     );
