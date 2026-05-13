@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createBooking, cancelBooking, getMyBookings, getBookingById } from '../controllers/booking.controller';
+import { createBooking, cancelBooking, getMyBookings, getBookingById, getBookingQR } from '../controllers/booking.controller';
 import { getLines, getLineById, getTrips, getTripById } from '../controllers/search.controller';
 import { getTripTracking } from '../controllers/tracking.controller';
 import { updateProfile, getProfile } from '../controllers/user.controller';
@@ -12,6 +12,7 @@ const router = Router();
 router.post('/bookings', requireRider, createBooking);
 router.get('/bookings', requireRider, getMyBookings);
 router.get('/bookings/:id', requireRiderOwnedBooking, getBookingById);
+router.get('/bookings/:id/qr', requireRiderOwnedBooking, getBookingQR);
 router.delete('/bookings/:id', requireRiderOwnedBooking, cancelBooking);
 
 // Endpoints for searching lines and available trips (Rider role only)

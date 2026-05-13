@@ -15,6 +15,7 @@ model Line {
   fixedPrice     Decimal        @db.Decimal(10, 2)
   commissionRate Decimal        @default(0.10) @db.Decimal(5, 2)
   currency       String         @default("EGP") @db.VarChar(3)
+  estimatedDuration Int         @default(60) // Total trip duration in minutes
   
   isActive       Boolean        @default(true)
   createdAt      DateTime       @default(now()) @db.Timestamptz
@@ -47,6 +48,7 @@ model Stop {
   location   Unsupported("geography(Point, 4326)")?
   
   orderIndex Int
+  arrivalTimeOffset Int         @default(0) // Minutes from line departure time
 
   createdAt  DateTime       @default(now()) @db.Timestamptz
   updatedAt  DateTime       @updatedAt @db.Timestamptz

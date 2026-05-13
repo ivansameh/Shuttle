@@ -78,14 +78,22 @@ export class LineService {
   }
 
   /**
-   * List all lines
+   * List all lines (Paginated)
    */
-  static async getLines() {
-    return await prisma.line.findMany({
-      where: { isActive: true },
-      include: { schedules: true },
-      orderBy: { createdAt: 'desc' },
-    });
+  static async getLines(skip?: number, take?: number) {
+    const where = { isActive: true };
+    const [lines, total] = await Promise.all([
+      prisma.line.findMany({
+        where,
+        skip,
+        take,
+        include: { schedules: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.line.count({ where })
+    ]);
+
+    return { lines, total };
   }
 
   /**

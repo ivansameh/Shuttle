@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { Prisma, TripStatus } from '@prisma/client';
 import { getIO } from '../socket/socket.server';
 import { AppError } from '../utils/AppError';
+import { ScheduleValidationService } from '../services/ScheduleValidationService';
 
 export interface ScheduleTripDto {
   lineId: string;
@@ -35,12 +36,25 @@ export class TripAdminService {
       }
     }
 
+    // Step 1: Validate Driver availability if driverId is provided
+    const line = await prisma.line.findUnique({ where: { id: lineId } });
+    if (!line) throw new AppError('Line not found', 404);
+
+    const depTime = new Date(departureTime);
+    const durationMinutes = (line as any).estimatedDuration || 60;
+    const estEndTime = new Date(depTime.getTime() + durationMinutes * 60 * 1000);
+
+    if (driverId) {
+      await ScheduleValidationService.checkDriverOverlap(driverId, depTime, estEndTime);
+    }
+
     return await prisma.tripInstance.create({
       data: {
         lineId,
         driverId,
         vehicleId,
-        departureTime: new Date(departureTime),
+        departureTime: depTime,
+        estimatedEndTime: estEndTime,
         totalSeats: capacity,
         remainingSeats: capacity,
       },
@@ -51,6 +65,19 @@ export class TripAdminService {
    * Re-assign a driver to a trip
    */
   static async reassignDriver(tripId: string, driverId: string) {
+    const trip = await prisma.tripInstance.findUnique({
+      where: { id: tripId },
+      include: { line: true }
+    });
+
+    if (!trip) throw new AppError('Trip not found', 404);
+
+    const depTime = new Date(trip.departureTime);
+    const durationMinutes = (trip.line as any).estimatedDuration || 60;
+    const estEndTime = trip.estimatedEndTime || new Date(depTime.getTime() + durationMinutes * 60 * 1000);
+
+    await ScheduleValidationService.checkDriverOverlap(driverId, depTime, estEndTime);
+
     return await prisma.tripInstance.update({
       where: { id: tripId },
       data: { driverId },
@@ -88,6 +115,25 @@ export class TripAdminService {
       }
     }
 
+    const trip = await prisma.tripInstance.findUnique({
+      where: { id: tripId },
+      include: { line: true }
+    });
+
+    if (!trip) throw new AppError('Trip not found', 404);
+
+    const targetDriverId = dto.hasOwnProperty('driverId') ? driverId : trip.driverId;
+    const targetDepTime = departureTime ? new Date(departureTime) : new Date(trip.departureTime);
+    const durationMinutes = (trip.line as any).estimatedDuration || 60;
+    const targetEstEndTime = trip.estimatedEndTime || new Date(targetDepTime.getTime() + durationMinutes * 60 * 1000);
+
+    if (targetDriverId) {
+      // If driver OR time changed, we must re-validate
+      if (targetDriverId !== trip.driverId || departureTime) {
+        await ScheduleValidationService.checkDriverOverlap(targetDriverId, targetDepTime, targetEstEndTime);
+      }
+    }
+
     return await prisma.tripInstance.update({
       where: { id: tripId },
       data,
@@ -100,17 +146,24 @@ export class TripAdminService {
   }
 
   /**
-   * List all trips
+   * List all trips (Paginated)
    */
-  static async getTrips() {
-    return await prisma.tripInstance.findMany({
-      include: {
-        line: true,
-        driver: { select: { id: true, name: true } },
-        vehicle: { select: { id: true, licensePlate: true, capacity: true } }
-      },
-      orderBy: { departureTime: 'desc' }
-    });
+  static async getTrips(skip?: number, take?: number) {
+    const [trips, total] = await Promise.all([
+      prisma.tripInstance.findMany({
+        skip,
+        take,
+        include: {
+          line: true,
+          driver: { select: { id: true, name: true } },
+          vehicle: { select: { id: true, licensePlate: true, capacity: true } }
+        },
+        orderBy: { departureTime: 'desc' }
+      }),
+      prisma.tripInstance.count()
+    ]);
+
+    return { trips, total };
   }
 
   /**

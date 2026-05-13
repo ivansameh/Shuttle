@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { AppError } from '../utils/AppError';
 import { PricingService } from '../services/PricingService';
+import { QRService } from '../services/QRService';
+import { ScheduleValidationService } from '../services/ScheduleValidationService';
 
 export const createBooking = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -68,6 +70,32 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
         throw new AppError('Not enough seats remaining', 400);
       }
 
+      // Step B.2: Check for Rider Overlap (Anti-Conflict Logic)
+      // Fetch stop offsets for precise window calculation
+      const stopIds = [pickupStopIdClean, dropoffStopIdClean].filter((id): id is string => id !== null);
+      const stopsData = await tx.stop.findMany({
+        where: { id: { in: stopIds } },
+        select: { id: true, arrivalTimeOffset: true }
+      });
+
+      const pickupStop = stopsData.find((s: { id: string, arrivalTimeOffset: number }) => s.id === pickupStopIdClean);
+      const dropoffStop = stopsData.find((s: { id: string, arrivalTimeOffset: number }) => s.id === dropoffStopIdClean);
+
+      // Default to departure time if pickup stop not found, 
+      // and departure + 60 mins if dropoff stop not found.
+      const pickupOffset = pickupStop?.arrivalTimeOffset || 0;
+      const dropoffOffset = dropoffStop?.arrivalTimeOffset || 60;
+
+      const riderStartTime = new Date(new Date(tripInstance.departureTime).getTime() + pickupOffset * 60 * 1000);
+      const riderEndTime = new Date(new Date(tripInstance.departureTime).getTime() + dropoffOffset * 60 * 1000);
+
+      await ScheduleValidationService.checkRiderOverlap(
+        userId,
+        riderStartTime,
+        riderEndTime,
+        tx
+      );
+
       // Step E: Decrement remaining_seats on the TripInstance.
       await tx.tripInstance.update({
         where: { id: tripInstanceId },
@@ -93,10 +121,11 @@ export const createBooking = async (req: AuthRequest, res: Response, next: NextF
         }
       });
       
-      // Update qrPayload to have the specific Booking ID
+      // Update qrPayload with a cryptographically signed payload
+      const qrPayload = QRService.generateSignedPayload(newBooking.id, tripInstanceId, userId);
       const finalBooking = await tx.booking.update({
         where: { id: newBooking.id },
-        data: { qrPayload: `DUMMY_QR_PAYLOAD_FOR_BOOKING_${newBooking.id}` }
+        data: { qrPayload }
       });
 
       return finalBooking;
@@ -248,5 +277,35 @@ export const getBookingById = async (req: AuthRequest, res: Response, next: Next
   } catch (error: any) {
     console.error('Error fetching booking details:', error);
     res.status(500).json({ success: false, data: null, error: 'Internal server error' });
+  }
+};
+
+/**
+ * Task 2.4: Get Booking QR Image
+ * Returns the ticket QR code as a PNG image buffer.
+ */
+export const getBookingQR = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const booking = await prisma.booking.findFirst({
+      where: { id: id as string, userId },
+      select: { qrPayload: true }
+    });
+
+    if (!booking || !booking.qrPayload) {
+      res.status(404).json({ success: false, data: null, error: 'Booking or QR payload not found' });
+      return;
+    }
+
+    const qrBuffer = await QRService.generateQRBuffer(booking.qrPayload);
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `inline; filename="booking-qr-${id}.png"`);
+    res.send(qrBuffer);
+  } catch (error: any) {
+    console.error('Error generating QR image:', error);
+    res.status(500).json({ success: false, data: null, error: 'Failed to generate QR image' });
   }
 };

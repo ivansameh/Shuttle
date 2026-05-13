@@ -3,6 +3,7 @@ import { LineService } from '../services/LineService';
 import { TripAdminService } from '../services/TripAdminService';
 import { UserAdminService } from '../services/UserAdminService';
 import { NotificationService } from '../services/NotificationService';
+import { parsePagination, buildPaginatedResponse } from '../utils/pagination';
 
 export class AdminController {
   /**
@@ -28,12 +29,14 @@ export class AdminController {
   }
 
   /**
-   * List all lines
+   * List all lines (Paginated)
    */
   static async getLines(req: Request, res: Response) {
     try {
-      const lines = await LineService.getLines();
-      return res.status(200).json({ success: true, data: lines, error: null });
+      const pagination = parsePagination(req);
+      const { lines, total } = await LineService.getLines(pagination.skip, pagination.take);
+      res.setHeader('X-Total-Count', total.toString());
+      return res.status(200).json(buildPaginatedResponse(lines, total, pagination));
     } catch (error: any) {
       console.error('Error fetching lines:', error);
       return res.status(500).json({ success: false, data: null, error: 'Failed to fetch lines' });
@@ -106,12 +109,14 @@ export class AdminController {
   }
 
   /**
-   * List all trips
+   * List all trips (Paginated)
    */
   static async getTrips(req: Request, res: Response) {
     try {
-      const trips = await TripAdminService.getTrips();
-      return res.status(200).json({ success: true, data: trips, error: null });
+      const pagination = parsePagination(req);
+      const { trips, total } = await TripAdminService.getTrips(pagination.skip, pagination.take);
+      res.setHeader('X-Total-Count', total.toString());
+      return res.status(200).json(buildPaginatedResponse(trips, total, pagination));
     } catch (error: any) {
       console.error('Error fetching trips:', error);
       return res.status(500).json({ success: false, data: null, error: 'Failed to fetch trips' });
@@ -161,13 +166,19 @@ export class AdminController {
   }
 
   /**
-   * List all users
+   * List all users (Paginated)
    */
   static async getUsers(req: Request, res: Response) {
     try {
       const { tripId } = req.query;
-      const users = await UserAdminService.getUsers(tripId as string);
-      return res.status(200).json({ success: true, data: users, error: null });
+      const pagination = parsePagination(req);
+      const { users, total } = await UserAdminService.getUsers({
+        tripId: tripId as string,
+        skip: pagination.skip,
+        take: pagination.take
+      });
+      res.setHeader('X-Total-Count', total.toString());
+      return res.status(200).json(buildPaginatedResponse(users, total, pagination));
     } catch (error: any) {
       console.error('Error fetching users:', error);
       return res.status(500).json({ success: false, data: null, error: 'Failed to fetch users' });

@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { AppError } from '../utils/AppError';
 import { EventBus, EventType } from '../events/EventBus';
+import { ScheduleValidationService } from './ScheduleValidationService';
 
 export class FleetOrchestrator {
   /**
@@ -27,7 +28,7 @@ export class FleetOrchestrator {
       // 2. Acquire a FOR UPDATE lock on the TripInstance (Fleet Domain)
       // This prevents another driver from claiming the same trip simultaneously.
       const trips = await tx.$queryRaw<any[]>`
-        SELECT id, "driverId", status 
+        SELECT id, "driverId", status, "departureTime", "estimatedEndTime"
         FROM "TripInstance" 
         WHERE id = ${tripId}::uuid 
         FOR UPDATE
@@ -46,6 +47,11 @@ export class FleetOrchestrator {
       if (trip.status !== 'SCHEDULED') {
         throw new AppError('Only scheduled trips can be claimed', 400);
       }
+
+      // 2.2 Validate Driver schedule (Anti-Conflict)
+      const depTime = new Date(trip.departureTime);
+      const estEndTime = trip.estimatedEndTime ? new Date(trip.estimatedEndTime) : new Date(depTime.getTime() + 60 * 60 * 1000);
+      await ScheduleValidationService.checkDriverOverlap(driverId, depTime, estEndTime, tx);
 
       // 3. Update the TripInstance
       const updatedTrip = await tx.tripInstance.update({

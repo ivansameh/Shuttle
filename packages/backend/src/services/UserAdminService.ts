@@ -2,9 +2,10 @@ import { prisma } from '../lib/prisma';
 
 export class UserAdminService {
   /**
-   * List all users
+   * List all users (Paginated)
    */
-  static async getUsers(tripId?: string) {
+  static async getUsers(options: { tripId?: string; skip?: number; take?: number }) {
+    const { tripId, skip, take } = options;
     const where: any = {};
     if (tripId) {
       where.OR = [
@@ -13,20 +14,27 @@ export class UserAdminService {
       ];
     }
 
-    return await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        isActive: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          isActive: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    return { users, total };
   }
 
   /**

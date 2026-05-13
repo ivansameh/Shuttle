@@ -1,19 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
+import { parsePagination, buildPaginatedResponse } from '../utils/pagination';
 
 export const getLines = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userLat, userLng } = req.query;
+    const pagination = parsePagination(req);
+
+    const where = { 
+      isActive: true,
+      tripInstances: {
+        some: {
+          status: 'SCHEDULED' as any
+        }
+      }
+    };
 
     let lines = await prisma.line.findMany({
-      where: { 
-        isActive: true,
-        tripInstances: {
-          some: {
-            status: 'SCHEDULED'
-          }
-        }
-      },
+      where,
       include: {
         stops: {
           orderBy: {
@@ -35,7 +39,13 @@ export const getLines = async (req: Request, res: Response, next: NextFunction):
       });
     }
 
-    res.status(200).json({ success: true, data: lines, error: null });
+    // Apply pagination after sorting if distance sort was requested, 
+    // otherwise we could have done it at the DB level.
+    const total = lines.length;
+    const paginatedLines = lines.slice(pagination.skip, pagination.skip + pagination.take);
+
+    res.setHeader('X-Total-Count', total.toString());
+    res.status(200).json(buildPaginatedResponse(paginatedLines, total, pagination));
   } catch (error: any) {
     console.error('Error fetching lines:', error);
     res.status(500).json({ success: false, data: null, error: error.message || 'Internal server error' });
@@ -45,6 +55,7 @@ export const getLines = async (req: Request, res: Response, next: NextFunction):
 export const getTrips = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { lineId, date, userLat, userLng } = req.query;
+    const pagination = parsePagination(req);
 
     const whereClause: any = {
       status: 'SCHEDULED', // Only show available trips that haven't started/completed/cancelled
@@ -55,8 +66,6 @@ export const getTrips = async (req: Request, res: Response, next: NextFunction):
     }
 
     if (date && typeof date === 'string') {
-      // Assuming date is in 'YYYY-MM-DD' format, create a search range for that day
-      // Using UTC parsing
       const startOfDay = new Date(`${date}T00:00:00.000Z`);
       const endOfDay = new Date(`${date}T23:59:59.999Z`);
       
@@ -66,6 +75,8 @@ export const getTrips = async (req: Request, res: Response, next: NextFunction):
       };
     }
 
+    // Fetch all matching trips to allow for distance-based sorting
+    // For very large datasets, we would need PostGIS to do this at DB level
     let trips = await prisma.tripInstance.findMany({
       where: whereClause,
       include: {
@@ -87,7 +98,11 @@ export const getTrips = async (req: Request, res: Response, next: NextFunction):
       });
     }
 
-    res.status(200).json({ success: true, data: trips, error: null });
+    const total = trips.length;
+    const paginatedTrips = trips.slice(pagination.skip, pagination.skip + pagination.take);
+
+    res.setHeader('X-Total-Count', total.toString());
+    res.status(200).json(buildPaginatedResponse(paginatedTrips, total, pagination));
   } catch (error: any) {
     console.error('Error fetching trips:', error);
     res.status(500).json({ success: false, data: null, error: error.message || 'Internal server error' });
