@@ -31,9 +31,11 @@ export const getIO = (): Server => {
 };
 
 export const initSocketServer = (httpServer: HttpServer): Server => {
+  const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : '*';
+
   const io = new Server(httpServer, {
     cors: {
-      origin: '*', // TODO: Lock down to specific origins in production
+      origin: allowedOrigins,
       methods: ['GET', 'POST'],
     },
     // Reconnect transports: WebSocket first, fall back to long-polling.

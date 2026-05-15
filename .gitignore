@@ -44,3 +44,9 @@ node_modules/.prisma
 .agents/
 task.md
 implementation_plan.md
+
+# Security & Certs
+certs/
+*.pem
+*.key
+*.crt

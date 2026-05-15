@@ -115,7 +115,7 @@ export const checkVehicleOwnership = async (req: AuthRequest, res: Response, nex
 };
 
 /**
- * Resource Ownership: Ensures the rider owns the booking specified in params
+ * Ensures the rider owns the booking specified in params
  */
 export const checkBookingOwnership = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const id = req.params.id as string;
@@ -139,9 +139,33 @@ export const checkBookingOwnership = async (req: AuthRequest, res: Response, nex
   }
 };
 
+/**
+ * Ensures the rider has an active booking for the trip they are trying to track
+ */
+export const checkTripTrackingPermission = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const tripId = req.params.tripId as string;
+  const userId = req.user?.id;
+
+  if (!tripId || !userId) return res.status(400).json({ success: false, data: null, error: 'Trip ID or User context missing.' });
+
+  try {
+    const bookings = await bookingRepository.findByTrip(tripId);
+    const hasBooking = bookings.some((b: any) => b.userId === userId && ['CONFIRMED', 'BOARDED'].includes(b.status));
+
+    if (!hasBooking) {
+      return res.status(403).json({ success: false, data: null, error: 'Access denied. You do not have an active booking for this trip.' });
+    }
+
+    next();
+  } catch (err) {
+    return res.status(500).json({ success: false, data: null, error: 'Tracking permission verification failed.' });
+  }
+};
+
 // Common aliases for role-based protection
 export const requireAdmin = [authenticate, authorize(['ADMIN'])];
 export const requireRider = [authenticate, authorize(['RIDER'])];
 export const requireDriver = [authenticate, authorize(['DRIVER'])];
 export const requireDriverOwnedTrip = [authenticate, authorize(['DRIVER']), checkTripOwnership];
 export const requireRiderOwnedBooking = [authenticate, authorize(['RIDER']), checkBookingOwnership];
+export const requireRiderTrackingAccess = [authenticate, authorize(['RIDER']), checkTripTrackingPermission];

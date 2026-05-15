@@ -7,6 +7,8 @@ import { getDispatchFeed } from '../controllers/dispatch.controller';
 import { AnalyticsController } from '../controllers/analytics.controller';
 import { requireAdmin } from '../middleware/auth.middleware';
 import { cacheAnalytics } from '../middleware/cache.middleware';
+import { validate } from '../middleware/validate.middleware';
+import { CreateLineSchema, ScheduleTripSchema } from '../schemas';
 
 const router = Router();
 
@@ -22,11 +24,11 @@ router.get('/analytics/transactions', AnalyticsController.getRecentTransactions)
 router.get('/dispatch', getDispatchFeed);
 
 // Lines & Trips (Internal to AdminController)
-router.post('/lines', AdminController.createLine);
+router.post('/lines', validate(CreateLineSchema), AdminController.createLine);
 router.get('/lines', AdminController.getLines);
 router.patch('/lines/:id', AdminController.updateLineDetails);
 router.delete('/lines/:id', AdminController.deleteLine);
-router.post('/trips', AdminController.scheduleTrip);
+router.post('/trips', validate(ScheduleTripSchema), AdminController.scheduleTrip);
 router.get('/trips', AdminController.getTrips);
 router.get('/trips/:id/manifest', AdminController.getTripManifest);
 router.patch('/trips/:id/driver', AdminController.reassignDriver);

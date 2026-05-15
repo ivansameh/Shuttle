@@ -1,4 +1,5 @@
 import { Socket } from 'socket.io';
+import { AuthService } from '../lib/auth.service';
 
 /**
  * Valid roles that can connect to the WebSocket server.
@@ -17,39 +18,38 @@ export interface SocketData {
 }
 
 /**
- * Task 7.1 — Mock Socket.IO auth middleware.
- *
- * In production this would verify a JWT from `handshake.auth.token`.
- * For the MVP, we read `handshake.auth.role` and `handshake.auth.userId`
- * directly — the same pattern as our HTTP mock middleware (x-*-secret headers).
- *
+ * Socket.IO auth middleware.
+ * Verifies the JWT from `handshake.auth.token`.
  * Called via: `io.use(socketAuthMiddleware)`.
  */
 export const socketAuthMiddleware = (
   socket: Socket,
   next: (err?: Error) => void,
 ): void => {
-  const { role, userId } = socket.handshake.auth as {
-    role?: string;
-    userId?: string;
-  };
+  const { token } = socket.handshake.auth as { token?: string };
 
-  const validRoles: SocketRole[] = ['ADMIN', 'RIDER', 'DRIVER'];
-
-  if (!userId || !role || !validRoles.includes(role as SocketRole)) {
-    return next(
-      new Error(
-        'Authentication failed. Provide handshake.auth = { userId, role: "ADMIN"|"RIDER"|"DRIVER" }',
-      ),
-    );
+  if (!token) {
+    return next(new Error('Authentication failed. No token provided in handshake.auth.token'));
   }
 
-  // Attach identity to the socket so handlers can read it without re-parsing
-  socket.data = {
-    userId,
-    role: role as SocketRole,
-  } satisfies SocketData;
+  try {
+    const decoded = AuthService.verifyToken(token);
+    
+    const validRoles: SocketRole[] = ['ADMIN', 'RIDER', 'DRIVER'];
+    if (!validRoles.includes(decoded.role as SocketRole)) {
+      return next(new Error(`Authentication failed. Invalid role: ${decoded.role}`));
+    }
 
-  console.log(`[Socket Auth] ✅ Connected: userId=${userId}, role=${role}, socketId=${socket.id}`);
-  next();
+    // Attach identity to the socket so handlers can read it without re-parsing
+    socket.data = {
+      userId: decoded.id,
+      role: decoded.role as SocketRole,
+    } satisfies SocketData;
+
+    console.log(`[Socket Auth] ✅ Connected: userId=${decoded.id}, role=${decoded.role}, socketId=${socket.id}`);
+    next();
+  } catch (error) {
+    console.warn(`[Socket Auth] ❌ Forbidden: ${(error as Error).message}`);
+    next(new Error('Authentication failed. Invalid or expired token.'));
+  }
 };
