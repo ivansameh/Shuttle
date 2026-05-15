@@ -1,4 +1,5 @@
 import { redis, createRedisClient } from '../lib/redis';
+import { logger } from '../lib/logger';
 
 export interface IEventBus {
   publish(topic: string, payload: any): Promise<void>;
@@ -28,13 +29,13 @@ export class RedisStreamEventBus implements IEventBus {
       // Using MAXLEN to prevent the stream from growing indefinitely
       await redis.xadd(topic, 'MAXLEN', '~', '1000', '*', 'payload', data);
     } catch (err) {
-      console.error(`[EventBus] Failed to publish to ${topic}:`, err);
+      logger.error({ err, topic }, '[EventBus] Failed to publish');
     }
   }
 
   async subscribe(topic: string, handler: (payload: any) => void): Promise<void> {
     const subscriberClient = createRedisClient();
-    console.log(`[EventBus] Subscribing to topic: ${topic}`);
+    logger.info({ topic }, '[EventBus] Subscribing to topic');
     
     const readStream = async () => {
       let lastId = '$'; // Start from new entries
@@ -51,13 +52,13 @@ export class RedisStreamEventBus implements IEventBus {
                 const payload = JSON.parse(payloadStr);
                 handler(payload);
               } catch (parseErr) {
-                console.error(`[EventBus] Failed to parse message ${id}:`, parseErr);
+                logger.error({ err: parseErr, messageId: id }, '[EventBus] Failed to parse message');
               }
               lastId = id;
             }
           }
         } catch (err) {
-          console.error(`[EventBus] Error reading from stream ${topic}:`, err);
+          logger.error({ err, topic }, '[EventBus] Error reading from stream');
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
