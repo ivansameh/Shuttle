@@ -8,28 +8,27 @@ import { logger } from './lib/logger';
 
 const PORT = process.env.PORT || 3001;
 const IS_PROD = process.env.NODE_ENV === 'production';
+const REQUIRE_HTTPS = process.env.REQUIRE_HTTPS === 'true';
 
 /**
- * mTLS Configuration (Task 3.10)
- * In production, we require client certificates for zero-trust security.
- * In development, we use standard HTTP for convenience.
+ * mTLS Configuration
  */
 let httpServer: http.Server | https.Server;
 
-if (IS_PROD) {
+if (REQUIRE_HTTPS) {
   try {
     const certsDir = path.join(__dirname, '../certs');
     const options = {
       key: fs.readFileSync(path.join(certsDir, 'server.key')),
       cert: fs.readFileSync(path.join(certsDir, 'server.crt')),
       ca: fs.readFileSync(path.join(certsDir, 'ca.crt')),
-      requestCert: true,
-      rejectUnauthorized: true, // Enforce client certificate verification
+      requestCert: process.env.ENABLE_MTLS === 'true',
+      rejectUnauthorized: process.env.ENABLE_MTLS === 'true', 
     };
     httpServer = https.createServer(options, app);
-    logger.info('🔒 mTLS HTTPS server configured for production.');
+    logger.info(`🔒 HTTPS server configured (mTLS: ${process.env.ENABLE_MTLS === 'true'}).`);
   } catch (err) {
-    logger.error({ err }, '❌ Failed to load mTLS certificates. Falling back to HTTP.');
+    logger.error({ err }, '❌ Failed to load certificates. Falling back to HTTP.');
     httpServer = http.createServer(app);
   }
 } else {
@@ -43,11 +42,12 @@ initSocketServer(httpServer);
 import { startTripMonitor } from './services/trip-monitor.service';
 startTripMonitor();
 
-httpServer.listen(PORT, () => {
+// Bind to 0.0.0.0 for Docker compatibility
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
   const protocol = httpServer instanceof https.Server ? 'https' : 'http';
   const wsProtocol = httpServer instanceof https.Server ? 'wss' : 'ws';
-  logger.info(`🚀 Shuttle Backend running on ${protocol}://localhost:${PORT}`);
-  logger.info(`⚡ Socket.IO WebSocket server ready on ${wsProtocol}://localhost:${PORT}`);
+  logger.info(`🚀 Shuttle Backend running on ${protocol}://0.0.0.0:${PORT}`);
+  logger.info(`⚡ Socket.IO WebSocket server ready on ${wsProtocol}://0.0.0.0:${PORT}`);
 });
 
 process.on('SIGTERM', () => {

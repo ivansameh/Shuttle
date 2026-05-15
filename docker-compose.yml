@@ -1,67 +1,76 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgis/postgis:15-3.3
-    container_name: shuttle_postgres
+  # --- INFRASTRUCTURE ---
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: shuttle-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: password123
       POSTGRES_DB: shuttle
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: shuttle_redis
+    container_name: shuttle-redis
     ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-    restart: unless-stopped
+      - "56379:6379"
+    restart: always
 
+  # --- BACKEND ---
   backend:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
-    container_name: shuttle_backend
+    container_name: shuttle-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:password123@db:5432/shuttle?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: super-secret-jwt-key
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174
+      NODE_ENV: production
+      ENABLE_MTLS: "false"
+    command: sh -c "node -e \"const net = require('net'); const check = () => { const s = net.connect(5432, 'db', () => { s.end(); console.log('Database is up!'); process.exit(0); }); s.on('error', () => { console.log('Waiting for database...'); setTimeout(check, 2000); }); }; check();\" && npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
     ports:
       - "3001:3001"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/shuttle?schema=public
-      - REDIS_URL=redis://redis:6379
-      - NODE_ENV=production
-      - JWT_SECRET=shuttle_super_secret_jwt_key
     depends_on:
-      - postgres
-      - redis
-    restart: unless-stopped
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
-  admin-web:
-    build:
-      context: .
-      dockerfile: apps/admin-web/Dockerfile
-    container_name: shuttle_admin_web
-    ports:
-      - "5000:80"
-    depends_on:
-      - backend
-    restart: unless-stopped
-
+  # --- FRONTEND: RIDER WEB ---
   rider-web:
     build:
       context: .
-      dockerfile: apps/rider-web/Dockerfile
-    container_name: shuttle_rider_web
+      dockerfile: Dockerfile.frontend
+      args:
+        APP_PATH: apps/rider-web
+    container_name: shuttle-rider-web
     ports:
-      - "5001:80"
+      - "5173:80"
     depends_on:
       - backend
-    restart: unless-stopped
+
+  # --- FRONTEND: ADMIN WEB ---
+  admin-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        APP_PATH: apps/admin-web
+    container_name: shuttle-admin-web
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
-  redisdata:
