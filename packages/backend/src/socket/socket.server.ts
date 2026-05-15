@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { socketAuthMiddleware, SocketData } from './auth.middleware';
+import { logger } from '../lib/logger';
 import { registerAdminHandlers } from './handlers/admin.handler';
 import { registerDriverHandlers } from './handlers/driver.handler';
 import { registerRiderHandlers } from './handlers/rider.handler';
@@ -74,11 +75,11 @@ export const initSocketServer = (httpServer: HttpServer): Server => {
       default:
         // Unreachable — auth middleware already validated role.
         // Defensive close in case the middleware is bypassed in tests.
-        console.warn(`[Socket] Unknown role '${role}'. Disconnecting socketId=${socket.id}`);
+        logger.warn({ socketId: socket.id, role }, `[Socket] Unknown role. Disconnecting.`);
         socket.disconnect(true);
     }
   });
 
-  console.log('[Socket.IO] Server initialized and attached to HTTP server.');
+  logger.info('[Socket.IO] Server initialized and attached to HTTP server.');
   return io;
 };

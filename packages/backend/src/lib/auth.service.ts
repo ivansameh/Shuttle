@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger';
 
 // RS256 Asymmetric Key Pair
 // --------------------------------------------------------------------------
@@ -18,7 +19,7 @@ try {
     publicKey = fs.readFileSync(publicKeyPath, 'utf8');
   }
 } catch (error) {
-  console.warn('⚠️ Failed to load RSA keys for JWT from certs directory.');
+  logger.warn('⚠️ Failed to load RSA keys for JWT from certs directory.');
 }
 
 // Fallback to environment variables if files are missing

@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import { AuthService } from '../lib/auth.service';
+import { logger } from '../lib/logger';
 
 /**
  * Valid roles that can connect to the WebSocket server.
@@ -46,10 +47,10 @@ export const socketAuthMiddleware = (
       role: decoded.role as SocketRole,
     } satisfies SocketData;
 
-    console.log(`[Socket Auth] ✅ Connected: userId=${decoded.id}, role=${decoded.role}, socketId=${socket.id}`);
+    logger.info({ userId: decoded.id, role: decoded.role, socketId: socket.id }, '[Socket Auth] ✅ Connected');
     next();
   } catch (error) {
-    console.warn(`[Socket Auth] ❌ Forbidden: ${(error as Error).message}`);
+    logger.warn({ socketId: socket.id, error: (error as Error).message }, '[Socket Auth] ❌ Forbidden');
     next(new Error('Authentication failed. Invalid or expired token.'));
   }
 };

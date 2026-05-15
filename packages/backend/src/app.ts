@@ -9,7 +9,11 @@ import authRoutes from './routes/auth.routes';
 import chatRoutes from './routes/chat.routes';
 import notificationRoutes from './routes/notification.routes';
 
+import pinoHttp from 'pino-http';
+import { logger } from './lib/logger';
+import { requestIdMiddleware } from './middleware/request-id.middleware';
 import { authRateLimiter, userRateLimiter, adminRateLimiter } from './middleware/rate-limit.middleware';
+import { errorHandler } from './middleware/error.middleware';
 
 dotenv.config();
 
@@ -26,11 +30,15 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Simple request logger
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
+// Request ID & Logging
+app.use(requestIdMiddleware);
+app.use(pinoHttp({
+  logger,
+  genReqId: (req: any) => req.id,
+  // Custom success/error messages
+  customSuccessMessage: (req, res) => `${req.method} ${req.url} completed ${res.statusCode}`,
+  customErrorMessage: (req, res, err) => `${req.method} ${req.url} failed ${res.statusCode}: ${err.message}`,
+}));
 
 // Routes
 // Tier 1: Auth (Strict)
@@ -58,5 +66,8 @@ app.use((req, res) => {
     error: `Route ${req.originalUrl} not found`,
   });
 });
+
+// Global error handler (must be last)
+app.use(errorHandler);
 
 export default app;
