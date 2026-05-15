@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { redis } from '../lib/redis';
+import { logger } from '../lib/logger';
 
 /**
  * Cache Middleware — Task 2.3
@@ -11,6 +12,11 @@ import { redis } from '../lib/redis';
  */
 export const cacheAnalytics = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const key = `cache:analytics:${req.originalUrl}`;
+
+  // If Redis is not connected, skip caching and go straight to DB
+  if (redis.status !== 'ready') {
+    return next();
+  }
 
   try {
     // 1. Try to fetch from Redis
@@ -26,11 +32,11 @@ export const cacheAnalytics = async (req: Request, res: Response, next: NextFunc
     const originalJson = res.json.bind(res);
 
     res.json = (body: any) => {
-      // Only cache successful responses
-      if (res.statusCode >= 200 && res.statusCode < 300 && body.success) {
+      // Only cache successful responses if Redis is still ready
+      if (res.statusCode >= 200 && res.statusCode < 300 && body.success && redis.status === 'ready') {
         // Cache for 15 minutes (900 seconds)
         redis.setex(key, 900, JSON.stringify(body)).catch(err => {
-          console.error('[Redis] Cache store failure:', err);
+          logger.error({ err }, '[Redis] Cache store failure');
         });
       }
       
@@ -39,7 +45,7 @@ export const cacheAnalytics = async (req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
-    console.error('[Cache] Middleware failure:', error);
+    logger.error({ err: error }, '[Cache] Middleware failure');
     // On cache failure, proceed to the controller as a fallback
     next();
   }
